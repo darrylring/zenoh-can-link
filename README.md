@@ -233,29 +233,3 @@ Payload:
 | 0 | Message | `0x02` (response) |
 | 1:16 | Unique ID | Echoed unique hardware ID |
 | 17:18 | Node ID | Assigned node ID |
-
-## Possible Optimizations
-
-### 11-bit Unicast Identifier for Single-Router Segments
-
-On a client-router segment with a single router, clients only exchange unicast
-traffic with that router, so one end of every unicast session is implied. The
-29-bit unicast identifier, which carries both a source and a destination, is
-more than is needed. Unicast frames on such a segment could instead use an
-11-bit identifier carrying only the client's node ID:
-
-| Bits | Field | Description |
-|------|-------|-------------|
-| 10:8 | Priority | Zenoh priority |
-| 7 | Direction | Set on frames sent by the router |
-| 6:0 | Client | Client node ID: the sender when Direction is 0, the receiver when Direction is 1 |
-
-Compared to the 29-bit format, this would shorten the identifier on the wire,
-and as a standard-length identifier it would be cheaper for devices to filter.
-
-Open questions:
-
-* How are these frames distinguished from multicast frames, which use the same
-  identifier length?
-* How do nodes learn that the segment has a single router and switch to this
-  format, and what happens if a second router appears?
