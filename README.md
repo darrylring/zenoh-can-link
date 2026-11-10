@@ -165,6 +165,29 @@ Each side can filter compact unicast frames with a single acceptance filter. The
 bus router matches Unicast = 1, Direction = 0. A client matches Unicast = 1,
 Direction = 1, Client = its own node ID.
 
+#### Bus Router Beacon
+
+The bus router periodically sends a Zenoh scouting Hello as an ordinary
+multicast datagram with Source = 127. No new frame format is needed. A node
+that receives it knows it is on a Zenoh/CAN bus with a bus router, and that it
+can use compact unicast. A client that only cares about the bus router can
+match the beacon with a single acceptance filter: Unicast = 0, Source = 127.
+
+Clients may connect to node 127 without waiting for a beacon. Router restarts
+are detected through Zenoh's own session lease, not through the beacon.
+
+A bus can have only one bus router, because no two nodes may share node ID 127.
+A configuration in which more than one node sends beacons as node 127 is
+illegal.
+
+#### Other Topologies
+
+Compact unicast is optional and applies only to sessions between a client and
+node 127. Peer-to-peer sessions, sessions with routers at any other node ID,
+and buses with no bus router at all use multicast and 29-bit unicast exactly as
+described above. These can coexist on the same bus with a bus router and its
+compact clients.
+
 ### Unicast Identifier
 
 Unicast frames other than compact unicast use 29-bit identifiers to carry priority, sender and receiver
