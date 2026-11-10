@@ -90,7 +90,9 @@ The link should:
 * Every node has a 7-bit ID (up to 127 devices per bus, which is likely more
   than needed), used for both unicast and multicast.
 * Multicast uses 11-bit identifiers. Unicast and node ID allocation use 29-bit
-  identifiers.
+  identifiers, except that a client with a dynamic node ID (1-63) may use a
+  compact 11-bit unicast identifier to talk to its bus's router.
+* A bit in the 11-bit identifier distinguishes multicast from compact unicast.
 * Every frame starts with a header byte. The first frame of a datagram also
   carries the datagram length: 1 byte for a single-frame datagram, 2 bytes for
   a multi-frame datagram.
@@ -100,7 +102,7 @@ The link should:
 * Node IDs are assigned based on a 16 byte per-device unique ID.
 * There is one ID allocator per bus (no redundancy).
 * Dynamic and static node IDs come from separate pools: dynamic IDs are 1-63 and
-  static IDs are 64-127.
+  static IDs are 64-127. Static ID 127 is reserved for the bus router.
 
 ## Addressing
 
@@ -111,15 +113,61 @@ Multicast frames use an 11-bit identifier to carry priority and sender node ID:
 | Bits | Field | Description |
 |------|-------|-------------|
 | 10:8 | Priority | Zenoh priority |
-| 7 | *Reserved* | *Reserved* |
+| 7 | Unicast | 0 |
 | 6:0 | Source | Sender node ID (1-127) |
 
 With equal priorities, the lower sender node ID wins arbitration. A receiver may
 filter frames based on sender node ID.
 
+### Compact Unicast Identifier
+
+A bus may have one *bus router*: a router that accepts client sessions using
+11-bit unicast identifiers. The bus router always has the static node ID 127, on
+every bus. Because one end of every such session is always node 127, its node
+ID is left out of the identifier, and only the client's node ID and a direction
+bit are carried:
+
+| Bits | Field | Description |
+|------|-------|-------------|
+| 10:8 | Priority | Zenoh priority |
+| 7 | Unicast | 1 |
+| 6 | Direction | 0 for client to router, 1 for router to client |
+| 5:0 | Client | Client node ID (1-63) |
+
+The Direction bit has the same meaning as in the 29-bit unicast identifier: it
+is set on frames sent by the accepting side, which is always the router.
+
+Rules:
+
+* Node ID 127 is reserved for the bus router, so there is at most one per bus.
+  This matters because two nodes sending router-to-client frames would produce
+  identical identifiers, which breaks CAN arbitration. 127 is in the static
+  pool, so the allocator never hands it out, and all 63 dynamic IDs remain
+  available to compact clients.
+* The bus router is an ordinary node in every other respect. It sends multicast
+  with Source = 127, and nodes that cannot use compact unicast reach it with
+  29-bit unicast at node ID 127.
+* Only clients with node IDs 1-63 can use compact unicast. This is the dynamic
+  node ID pool, so every dynamically addressed client qualifies. Clients with
+  static node IDs (64-127), and any session that is not between a client and
+  the bus router, use the 29-bit unicast identifier instead.
+* A client needs no discovery or configuration to find the bus router: it
+  always opens its compact session to node 127. A given client and router pair
+  uses either compact or 29-bit unicast, never both.
+* Client 0 is reserved.
+
+When priorities are equal, multicast frames win arbitration over compact
+unicast frames. Among compact unicast frames, client-to-router frames win over
+router-to-client frames, and a lower client node ID wins. Any 11-bit frame also
+wins over a 29-bit frame whose top 11 bits are the same.
+
+Each side can filter compact unicast frames with a single acceptance filter. The
+bus router matches Unicast = 1, Direction = 0. A client matches Unicast = 1,
+Direction = 1, Client = its own node ID.
+
 ### Unicast Identifier
 
-Unicast frames use 29-bit identifiers to carry priority, sender and receiver
+Unicast frames other than compact unicast use 29-bit identifiers to carry priority, sender and receiver
 node IDs, a frame kind, and a direction bit:
 
 | Bits | Field | Description |
